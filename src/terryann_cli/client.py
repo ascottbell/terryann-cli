@@ -19,12 +19,15 @@ class GatewayClient:
             response.raise_for_status()
             return response.json()
 
-    async def send_message(self, session_id: str, message: str) -> dict:
+    async def send_message(
+        self, session_id: str, message: str, surface: str = "cli"
+    ) -> dict:
         """Send a message to the gateway.
 
         Args:
             session_id: Conversation session ID
             message: User message text
+            surface: Client surface identifier (default: "cli")
 
         Returns:
             Gateway response dict
@@ -32,7 +35,7 @@ class GatewayClient:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{self.base_url}/gateway/message",
-                json={"session_id": session_id, "message": message},
+                json={"session_id": session_id, "message": message, "surface": surface},
             )
             response.raise_for_status()
             return response.json()
