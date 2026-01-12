@@ -123,10 +123,15 @@ def print_splash(console: Console, session_id: str) -> None:
     """
     Print the TerryAnn splash screen.
 
+    Clears the terminal first so CLI starts fresh at top of screen.
+
     Args:
         console: Rich console to print to
         session_id: Session ID (first 8 chars shown)
     """
+    # Clear screen and move cursor to top (like Claude Code)
+    console.clear()
+
     console.print()
 
     # Try to render actual image, fall back to ASCII art
@@ -146,24 +151,7 @@ def print_splash(console: Console, session_id: str) -> None:
 
     console.print()
 
-    # Separator
-    console.print(f"  [dim]{'─' * 30}[/dim]")
-
-    console.print()
-
-    # Session info
-    console.print(f"  [dim]v{__version__}[/dim]  [dim]│[/dim]  [dim]Session:[/dim] {session_id[:8]}")
-
-    console.print()
-
-    # Usage hints
-    console.print("  [dim]Type 'exit' to end  •  Ctrl+C to interrupt[/dim]")
-    console.print("  [dim]Type [/dim][dim bold]?[/dim bold][dim] for help[/dim]")
-
-    console.print()
-
-    # Random suggestion
-    suggestion = random.choice(SUGGESTIONS)
-    console.print(f"  [dim italic]Try: {suggestion}[/dim italic]")
+    # Session info and hints on one line
+    console.print(f"  [dim]v{__version__}[/dim]  [dim]│[/dim]  [dim]Session:[/dim] {session_id[:8]}  [dim]│[/dim]  [dim]'exit' to end  •  Ctrl+C to interrupt[/dim]")
 
     console.print()
