@@ -6,7 +6,7 @@ import uuid
 
 import httpx
 import typer
-from prompt_toolkit import prompt as pt_prompt
+from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
 from rich.console import Console
 from rich.panel import Panel
@@ -20,8 +20,8 @@ from terryann_cli.spinner import run_with_rotating_status
 console = Console()
 
 
-def get_user_input() -> str | None:
-    """Get user input with placeholder text."""
+async def get_user_input_async(session: PromptSession) -> str | None:
+    """Get user input with placeholder text (async version)."""
     # Pick a random suggestion for placeholder
     suggestion = random.choice(SUGGESTIONS)
     placeholder = f"Ask me to {suggestion.lower()}..."
@@ -30,8 +30,8 @@ def get_user_input() -> str | None:
         # Print thin rule above prompt
         console.print(Rule(style="dim"))
 
-        # Use prompt_toolkit for placeholder support
-        user_input = pt_prompt(
+        # Use prompt_toolkit async prompt
+        user_input = await session.prompt_async(
             HTML('<ansicyan><b>)</b></ansicyan> '),
             placeholder=HTML(f'<ansigray>{placeholder}</ansigray>'),
         )
@@ -46,8 +46,11 @@ def get_user_input() -> str | None:
 
 async def chat_loop(client: GatewayClient, session_id: str):
     """Run the interactive chat loop."""
+    # Create prompt session for async input
+    prompt_session = PromptSession()
+
     while True:
-        user_input = get_user_input()
+        user_input = await get_user_input_async(prompt_session)
         if user_input is None:
             console.print("\n[dim]Goodbye![/dim]")
             break
