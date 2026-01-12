@@ -32,7 +32,7 @@ class GatewayClient:
         Returns:
             Gateway response dict
         """
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:  # 3 min for full pipeline
             response = await client.post(
                 f"{self.base_url}/gateway/message",
                 json={"session_id": session_id, "message": message, "surface": surface},
