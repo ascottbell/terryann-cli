@@ -11,6 +11,8 @@ from rich.prompt import Prompt
 
 from terryann_cli.client import GatewayClient
 from terryann_cli.config import load_config
+from terryann_cli.splash import print_splash
+from terryann_cli.spinner import run_with_rotating_status
 
 console = Console()
 
@@ -32,8 +34,12 @@ async def chat_loop(client: GatewayClient, session_id: str):
             continue
 
         try:
-            with console.status("[dim]TerryAnn is thinking...[/dim]", spinner="dots"):
-                result = await client.send_message(session_id, user_input)
+            # Use rotating branded status messages while waiting
+            result = await run_with_rotating_status(
+                console,
+                client.send_message(session_id, user_input),
+                message=user_input,
+            )
 
             response_text = result.get("response", "No response received.")
             console.print(
@@ -63,17 +69,8 @@ def chat():
     client = GatewayClient(config)
     session_id = str(uuid.uuid4())
 
-    console.print(
-        Panel(
-            "[bold]Welcome to TerryAnn[/bold]\n"
-            "Medicare Journey Intelligence Assistant\n\n"
-            f"[dim]Session:[/dim] {session_id[:8]}...\n"
-            f"[dim]Gateway:[/dim] {config.gateway_url}\n\n"
-            "[dim]Type 'exit' or 'quit' to end the conversation.[/dim]",
-            title="TerryAnn Chat",
-            border_style="blue",
-        )
-    )
+    # Display splash screen with ASCII logo
+    print_splash(console, session_id)
 
     try:
         asyncio.run(chat_loop(client, session_id))

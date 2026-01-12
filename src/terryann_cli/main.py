@@ -9,7 +9,6 @@ from terryann_cli.commands.status import status
 app = typer.Typer(
     name="terryann",
     help="CLI for TerryAnn Medicare Journey Intelligence Platform",
-    no_args_is_help=True,
 )
 
 
@@ -19,8 +18,9 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         None,
         "--version",
@@ -30,8 +30,13 @@ def main(
         help="Show version and exit.",
     ),
 ):
-    """TerryAnn CLI - Medicare Journey Intelligence Platform."""
-    pass
+    """TerryAnn CLI - Medicare Journey Intelligence Platform.
+
+    Run without arguments to start an interactive chat session.
+    """
+    # If no subcommand provided, launch chat by default
+    if ctx.invoked_subcommand is None:
+        chat()
 
 
 app.command()(status)
