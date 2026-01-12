@@ -4,6 +4,7 @@ import typer
 
 from terryann_cli import __version__
 from terryann_cli.commands.chat import chat
+from terryann_cli.commands.journeys import list_journeys, show_journey
 from terryann_cli.commands.status import status
 
 app = typer.Typer(
@@ -41,6 +42,12 @@ def main(
 
 app.command()(status)
 app.command()(chat)
+
+# Journeys subcommand group
+journeys_app = typer.Typer(help="Manage journeys")
+journeys_app.command("list")(list_journeys)
+journeys_app.command("show")(show_journey)
+app.add_typer(journeys_app, name="journeys")
 
 
 if __name__ == "__main__":
