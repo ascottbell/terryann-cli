@@ -18,6 +18,10 @@ from terryann_cli.client import GatewayClient
 from terryann_cli.config import load_config
 from terryann_cli.splash import print_splash, SUGGESTIONS
 from terryann_cli.spinner import run_with_rotating_status
+from terryann_cli.journey_confirm import (
+    confirm_journey_creation,
+    format_journey_params_for_api,
+)
 
 console = Console()
 
@@ -273,12 +277,12 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
 
             response_text = result.get("response", "No response received.")
 
-            # Check for pending_action (journey creation that needs direct backend call)
+            # Check for pending_action (journey confirmation needed)
             metadata = result.get("metadata", {})
             pending_action = metadata.get("pending_action")
 
-            if pending_action and pending_action.get("type") == "create_journey":
-                # Show TerryAnn's "brb" message first
+            if pending_action and pending_action.get("type") == "confirm_journey":
+                # Show TerryAnn's message first
                 console.print(
                     Panel(
                         response_text,
@@ -288,52 +292,77 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
                     )
                 )
 
-                # Now create the journey directly (bypasses gateway timeout)
-                params = pending_action.get("params", {})
-                console.print()
+                # Show confirmation UI with dropdowns
+                confirmed_params = confirm_journey_creation()
 
-                try:
-                    journey_result = await run_with_rotating_status(
-                        console,
-                        client.create_journey_direct(params),
-                        message="Building journey...",
+                if confirmed_params:
+                    # User confirmed - create journey directly
+                    api_params = format_journey_params_for_api(confirmed_params)
+                    api_params["user_id"] = pending_action.get("user_id")
+                    api_params["created_from"] = "cli"
+
+                    # Show "brb" message
+                    brb_message = (
+                        f"Perfect! {confirmed_params['campaign_label']} campaign for "
+                        f"{confirmed_params['location']['label']}. Let me build your journey now. "
+                        f"This takes about 90 seconds while I pull data from 15+ sources. "
+                        f"Be right back..."
                     )
-
-                    # Format journey summary
-                    journey_id = journey_result.get("id", "unknown")
-                    nodes = journey_result.get("nodes", [])
-                    touchpoints = [n for n in nodes if n.get("type") == "touchpoint"]
-
-                    # Format touchpoint list
-                    touchpoint_list = "\n".join(
-                        f"- **Day {tp.get('data', {}).get('day', 0)}:** "
-                        f"{tp.get('data', {}).get('label', 'Touchpoint')} "
-                        f"({tp.get('data', {}).get('channel', 'email').title()})"
-                        for tp in touchpoints[:6]
-                    )
-                    if len(touchpoints) > 6:
-                        touchpoint_list += f"\n- ... and {len(touchpoints) - 6} more"
-
-                    journey_summary = (
-                        f"**Journey Created:** `{journey_id}`\n\n"
-                        f"**Target:** {params.get('location_description') or ', '.join(params.get('zip_codes', []))}\n"
-                        f"**Campaign:** {params.get('campaign_type', '').replace('_', ' ').title()}\n\n"
-                        f"**Touchpoints:**\n{touchpoint_list}\n\n"
-                        f"You can now ask 'what if' questions like:\n"
-                        f"- \"What if we add a mailer on day 3?\"\n"
-                        f"- \"What if we remove the phone call?\""
-                    )
-
+                    console.print()
                     console.print(
                         Panel(
-                            journey_summary,
-                            title="[bold green]Journey Ready[/bold green]",
-                            border_style="green",
+                            brb_message,
+                            title="[bold magenta]TerryAnn[/bold magenta]",
+                            border_style="magenta",
                             padding=(0, 1),
                         )
                     )
-                except Exception as e:
-                    console.print(f"[red]Error creating journey: {e}[/red]")
+                    console.print()
+
+                    try:
+                        journey_result = await run_with_rotating_status(
+                            console,
+                            client.create_journey_direct(api_params),
+                            message="Building journey...",
+                        )
+
+                        # Format journey summary
+                        journey_id = journey_result.get("id", "unknown")
+                        nodes = journey_result.get("nodes", [])
+                        touchpoints = [n for n in nodes if n.get("type") == "touchpoint"]
+
+                        # Format touchpoint list
+                        touchpoint_list = "\n".join(
+                            f"- **Day {tp.get('data', {}).get('day', 0)}:** "
+                            f"{tp.get('data', {}).get('label', 'Touchpoint')} "
+                            f"({tp.get('data', {}).get('channel', 'email').title()})"
+                            for tp in touchpoints[:6]
+                        )
+                        if len(touchpoints) > 6:
+                            touchpoint_list += f"\n- ... and {len(touchpoints) - 6} more"
+
+                        journey_summary = (
+                            f"**Journey Created:** `{journey_id}`\n\n"
+                            f"**Target:** {confirmed_params['location']['label']}\n"
+                            f"**Campaign:** {confirmed_params['campaign_label']}\n\n"
+                            f"**Touchpoints:**\n{touchpoint_list}\n\n"
+                            f"You can now ask 'what if' questions like:\n"
+                            f"- \"What if we add a mailer on day 3?\"\n"
+                            f"- \"What if we remove the phone call?\""
+                        )
+
+                        console.print(
+                            Panel(
+                                journey_summary,
+                                title="[bold green]Journey Ready[/bold green]",
+                                border_style="green",
+                                padding=(0, 1),
+                            )
+                        )
+                    except Exception as e:
+                        console.print(f"[red]Error creating journey: {e}[/red]")
+                else:
+                    console.print("[dim]Journey creation cancelled.[/dim]")
             else:
                 # Normal response - just show it
                 console.print(

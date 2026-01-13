@@ -68,7 +68,8 @@ class GatewayClient:
 
         Args:
             params: Journey creation params including:
-                - zip_codes: List of ZIP codes
+                - zip_codes: List of ZIP codes (optional if locations provided)
+                - locations: List of location dicts with type, value, cluster_id (optional)
                 - campaign_type: Campaign type (e.g., "aep_acquisition")
                 - name: Journey name
                 - user_id: User ID for ownership
@@ -77,17 +78,25 @@ class GatewayClient:
         Returns:
             Journey creation response with nodes, edges, market_profile, etc.
         """
+        # Build request body
+        body: dict[str, Any] = {
+            "campaign_type": params.get("campaign_type", "aep_acquisition"),
+            "name": params.get("name", "New Journey"),
+            "user_id": params.get("user_id"),
+            "created_from": params.get("created_from", "cli"),
+        }
+
+        # Use locations if provided (for state/archetype targeting)
+        if params.get("locations"):
+            body["locations"] = params["locations"]
+        elif params.get("zip_codes"):
+            body["zip_codes"] = params["zip_codes"]
+
         async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout
             response = await client.post(
                 f"{BACKEND_URL}/journey/flowchart/create-v2",
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
-                json={
-                    "zip_codes": params.get("zip_codes", []),
-                    "campaign_type": params.get("campaign_type", "aep_acquisition"),
-                    "name": params.get("name", "New Journey"),
-                    "user_id": params.get("user_id"),
-                    "created_from": params.get("created_from", "cli"),
-                },
+                json=body,
             )
             response.raise_for_status()
             return response.json()
