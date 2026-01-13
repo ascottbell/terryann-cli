@@ -368,10 +368,10 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
                         touchpoints = [n for n in nodes if n.get("type") == "touchpoint"]
 
                         # Format touchpoint list
+                        # Backend returns flat structure: {label, channel} not nested under 'data'
                         touchpoint_list = "\n".join(
-                            f"- **Day {tp.get('data', {}).get('day', 0)}:** "
-                            f"{tp.get('data', {}).get('label', 'Touchpoint')} "
-                            f"({tp.get('data', {}).get('channel', 'email').title()})"
+                            f"- {tp.get('label', 'Touchpoint')} "
+                            f"({(tp.get('channel') or 'email').title()})"
                             for tp in touchpoints[:6]
                         )
                         if len(touchpoints) > 6:
