@@ -282,6 +282,11 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
             pending_action = metadata.get("pending_action")
 
             if pending_action and pending_action.get("type") == "confirm_journey":
+                # Check if gateway extracted complete info (skip confirmation UI)
+                extracted_campaign = pending_action.get("campaign_type")
+                extracted_location = pending_action.get("location_info", {})
+                has_complete_info = extracted_campaign and extracted_location.get("location_type")
+
                 # Show TerryAnn's message first
                 console.print(
                     Panel(
@@ -292,8 +297,39 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
                     )
                 )
 
-                # Show confirmation UI with dropdowns
-                confirmed_params = confirm_journey_creation()
+                if has_complete_info:
+                    # Skip confirmation UI - build params from extracted info
+                    campaign_id = extracted_campaign.lower()  # Gateway uses "AEP_RETENTION", CLI uses "aep_retention"
+                    campaign_label = campaign_id.replace("_", " ").title()
+
+                    # Build location from extracted info
+                    loc_type = extracted_location.get("location_type")  # "zip", "city", "state", etc
+                    loc_value = extracted_location.get("location_value")
+                    zip_codes = extracted_location.get("zip_codes", [])
+
+                    # Build label from what we have
+                    if loc_type == "zip" and zip_codes:
+                        loc_label = f"ZIP: {', '.join(zip_codes[:3])}" + (f" +{len(zip_codes)-3} more" if len(zip_codes) > 3 else "")
+                    elif extracted_location.get("city"):
+                        loc_label = extracted_location.get("city")
+                    elif extracted_location.get("state"):
+                        loc_label = extracted_location.get("state")
+                    else:
+                        loc_label = str(loc_value)
+
+                    confirmed_params = {
+                        "campaign_type": campaign_id,
+                        "campaign_label": campaign_label,
+                        "location": {
+                            "type": loc_type,
+                            "value": loc_value,
+                            "label": loc_label,
+                            "zip_codes": zip_codes,
+                        }
+                    }
+                else:
+                    # Show confirmation UI with dropdowns
+                    confirmed_params = confirm_journey_creation()
 
                 if confirmed_params:
                     # User confirmed - create journey directly
