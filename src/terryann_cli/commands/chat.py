@@ -337,6 +337,10 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
                     api_params["user_id"] = pending_action.get("user_id")
                     api_params["created_from"] = "cli"
 
+                    # Debug: show what we're sending
+                    console.print(f"[dim]DEBUG: pending_action={pending_action}[/dim]")
+                    console.print(f"[dim]DEBUG: user_id={api_params.get('user_id')}[/dim]")
+
                     # Show "brb" message
                     brb_message = (
                         f"Perfect! {confirmed_params['campaign_label']} campaign for "
