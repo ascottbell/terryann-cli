@@ -3,6 +3,7 @@
 import typer
 
 from terryann_cli import __version__
+from terryann_cli.commands.auth import login, logout, whoami
 from terryann_cli.commands.chat import chat
 from terryann_cli.commands.journeys import list_journeys, show_journey
 from terryann_cli.commands.status import status
@@ -42,6 +43,9 @@ def main(
 
 app.command()(status)
 app.command()(chat)
+app.command()(login)
+app.command()(logout)
+app.command()(whoami)
 
 # Journeys subcommand group
 journeys_app = typer.Typer(help="Manage journeys")

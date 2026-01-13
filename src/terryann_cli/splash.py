@@ -119,7 +119,7 @@ def get_ascii_logo_lines() -> list[Text]:
     return lines
 
 
-def print_splash(console: Console, session_id: str) -> None:
+def print_splash(console: Console, session_id: str, user_email: str | None = None) -> None:
     """
     Print the TerryAnn splash screen.
 
@@ -128,6 +128,7 @@ def print_splash(console: Console, session_id: str) -> None:
     Args:
         console: Rich console to print to
         session_id: Session ID (first 8 chars shown)
+        user_email: Logged in user email (if authenticated)
     """
     # Clear screen and move cursor to top (like Claude Code)
     console.clear()
@@ -152,6 +153,12 @@ def print_splash(console: Console, session_id: str) -> None:
     console.print()
 
     # Session info and hints on one line
-    console.print(f"  [dim]v{__version__}[/dim]  [dim]│[/dim]  [dim]Session:[/dim] {session_id[:8]}  [dim]│[/dim]  [dim]'exit' to end  •  Ctrl+C to interrupt[/dim]")
+    session_line = f"  [dim]v{__version__}[/dim]  [dim]│[/dim]  [dim]Session:[/dim] {session_id[:8]}"
+    if user_email:
+        session_line += f"  [dim]│[/dim]  [green]{user_email}[/green]"
+    else:
+        session_line += "  [dim]│[/dim]  [dim]Not logged in[/dim]"
+    session_line += "  [dim]│[/dim]  [dim]/ for menu[/dim]"
+    console.print(session_line)
 
     console.print()
