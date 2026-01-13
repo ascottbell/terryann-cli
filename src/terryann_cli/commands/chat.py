@@ -4,10 +4,12 @@ import asyncio
 import getpass
 import random
 import uuid
+import webbrowser
 
 import httpx
 import typer
 from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
 from rich.console import Console
 from rich.panel import Panel
@@ -22,19 +24,50 @@ from terryann_cli.journey_confirm import (
     confirm_journey_creation,
     format_journey_params_for_api,
 )
+from terryann_cli.commands.journeys import (
+    _build_journey_tree,
+    _fetch_journeys,
+    _fetch_journey,
+    _format_relative_time,
+    _parse_datetime,
+)
+from rich.table import Table
 
 console = Console()
 
 # Menu commands
 MENU_COMMANDS = {
+    "/journeys": "List your recent journeys",
+    "/last": "Open your most recent journey",
+    "/newjourney": "Start creating a new journey",
+    "/share": "Share a journey (coming soon)",
+    "/web": "Open terryann.ai in browser",
     "/help": "Show help from terryann.ai",
     "/faq": "Show FAQ from terryann.ai",
-    "/new": "Start a new session",
+    "/new": "Start fresh session (clears context)",
     "/clear": "Clear the screen",
     "/whoami": "Show current user",
     "/logout": "Log out and exit",
     "/exit": "Exit TerryAnn",
 }
+
+
+class SlashCommandCompleter(Completer):
+    """Completer that shows menu commands when user types '/'."""
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        # Only complete if input starts with /
+        if text.startswith("/"):
+            for cmd, desc in MENU_COMMANDS.items():
+                # Filter to commands that match what's typed
+                if cmd.startswith(text):
+                    yield Completion(
+                        cmd,
+                        start_position=-len(text),
+                        display=cmd,
+                        display_meta=desc,
+                    )
 
 
 def _show_menu():
@@ -194,8 +227,12 @@ async def get_user_input_async(session: PromptSession) -> str | None:
 
 async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser):
     """Run the interactive chat loop."""
-    # Create prompt session for async input
-    prompt_session = PromptSession()
+    # Create prompt session for async input with slash command completion
+    prompt_session = PromptSession(
+        completer=SlashCommandCompleter(),
+        complete_while_typing=True,
+        reserve_space_for_menu=6,  # Show 6 items, scroll for rest
+    )
     current_session_id = session_id
 
     while True:
@@ -253,6 +290,118 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
             auth.logout()
             console.print("[dim]Logged out. Goodbye![/dim]")
             break
+
+        if input_lower == "/journeys":
+            try:
+                config = load_config()
+                data = await _fetch_journeys(config.gateway_url, limit=10)
+                journeys = data.get("journeys", [])
+                if not journeys:
+                    console.print("[dim]No journeys found.[/dim]")
+                else:
+                    table = Table(show_header=True, header_style="bold magenta")
+                    table.add_column("ID", style="cyan", no_wrap=True)
+                    table.add_column("Name", style="white")
+                    table.add_column("Created", style="dim")
+                    for j in journeys[:10]:
+                        created_at = _parse_datetime(j["created_at"])
+                        table.add_row(
+                            j["id"][:8],
+                            j.get("name", "Unnamed"),
+                            _format_relative_time(created_at),
+                        )
+                    console.print(table)
+                    console.print(f"[dim]Showing {len(journeys)} most recent. Open /web for full list.[/dim]")
+            except Exception as e:
+                console.print(f"[red]Error fetching journeys: {e}[/red]")
+            continue
+
+        if input_lower == "/last":
+            try:
+                config = load_config()
+                data = await _fetch_journeys(config.gateway_url, limit=1)
+                journeys = data.get("journeys", [])
+                if not journeys:
+                    console.print("[dim]No journeys found.[/dim]")
+                else:
+                    journey = await _fetch_journey(config.gateway_url, journeys[0]["id"])
+                    journey_data = journey.get("journey_data", {}) or {}
+                    name = journey_data.get("name") or journey.get("name", "Journey")
+                    console.print(Panel(
+                        f"[bold]{name}[/bold]\n[dim]ID: {journey['id']}[/dim]",
+                        title="[bold green]Last Journey[/bold green]",
+                        border_style="green",
+                    ))
+                    if journey_data:
+                        console.print("\n[bold]Journey Flow[/bold]")
+                        tree = _build_journey_tree(journey_data, show_because=True)
+                        console.print(tree)
+            except Exception as e:
+                console.print(f"[red]Error fetching journey: {e}[/red]")
+            continue
+
+        if input_lower == "/newjourney":
+            # Trigger journey creation flow by simulating a journey request
+            console.print("[dim]Starting journey creation...[/dim]\n")
+            # Send a message that will trigger the journey flow
+            try:
+                result = await run_with_rotating_status(
+                    console,
+                    client.send_message(current_session_id, "I want to create a new journey"),
+                    message="Starting journey wizard...",
+                )
+                metadata = result.get("metadata", {})
+                pending_action = metadata.get("pending_action")
+                if pending_action and pending_action.get("type") == "journey_confirmation":
+                    # Show journey confirmation UI
+                    confirmed_params = await confirm_journey_creation(
+                        console, pending_action.get("params", {})
+                    )
+                    if confirmed_params:
+                        api_params = format_journey_params_for_api(confirmed_params, user.id)
+                        journey_result = await run_with_rotating_status(
+                            console,
+                            client.create_journey_direct(api_params),
+                            message="Building journey...",
+                        )
+                        journey_id = journey_result.get("id", "unknown")
+                        nodes = journey_result.get("nodes", [])
+                        touchpoints = [n for n in nodes if n.get("type") == "touchpoint"]
+                        header = (
+                            f"[bold]{confirmed_params.get('name', 'Journey')}[/bold]\n"
+                            f"[dim]ID: {journey_id}[/dim]\n"
+                            f"Target: {confirmed_params['location']['label']} • "
+                            f"Campaign: {confirmed_params['campaign_label']} • "
+                            f"{len(touchpoints)} touchpoints"
+                        )
+                        console.print(Panel(header, title="[bold green]Journey Created[/bold green]", border_style="green"))
+                        console.print("\n[bold]Journey Flow[/bold]")
+                        tree = _build_journey_tree(journey_result, show_because=True)
+                        console.print(tree)
+                    else:
+                        console.print("[dim]Journey creation cancelled.[/dim]")
+                else:
+                    console.print("[dim]Journey wizard not available. Try typing your request directly.[/dim]")
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+            continue
+
+        if input_lower == "/web":
+            webbrowser.open("https://terryann.ai")
+            console.print("[dim]Opening terryann.ai in your browser...[/dim]")
+            continue
+
+        if input_lower == "/share":
+            console.print(
+                Panel(
+                    "Journey sharing is coming soon!\n\n"
+                    "You'll be able to share journeys with teammates and clients "
+                    "directly from the CLI.",
+                    title="[bold cyan]Coming Soon[/bold cyan]",
+                    border_style="cyan",
+                )
+            )
+            continue
 
         if not user_input.strip():
             continue
@@ -337,10 +486,6 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
                     api_params["user_id"] = pending_action.get("user_id")
                     api_params["created_from"] = "cli"
 
-                    # Debug: show what we're sending
-                    console.print(f"[dim]DEBUG: pending_action={pending_action}[/dim]")
-                    console.print(f"[dim]DEBUG: user_id={api_params.get('user_id')}[/dim]")
-
                     # Show "brb" message
                     brb_message = (
                         f"Perfect! {confirmed_params['campaign_label']} campaign for "
@@ -366,38 +511,31 @@ async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser)
                             message="Building journey...",
                         )
 
-                        # Format journey summary
+                        # Display journey with rich visualization
                         journey_id = journey_result.get("id", "unknown")
                         nodes = journey_result.get("nodes", [])
                         touchpoints = [n for n in nodes if n.get("type") == "touchpoint"]
 
-                        # Format touchpoint list
-                        # Backend returns flat structure: {label, channel} not nested under 'data'
-                        touchpoint_list = "\n".join(
-                            f"- {tp.get('label', 'Touchpoint')} "
-                            f"({(tp.get('channel') or 'email').title()})"
-                            for tp in touchpoints[:6]
+                        # Summary header
+                        header = (
+                            f"[bold]{confirmed_params.get('name', 'Journey')}[/bold]\n"
+                            f"[dim]ID: {journey_id}[/dim]\n"
+                            f"Target: {confirmed_params['location']['label']} • "
+                            f"Campaign: {confirmed_params['campaign_label']} • "
+                            f"{len(touchpoints)} touchpoints"
                         )
-                        if len(touchpoints) > 6:
-                            touchpoint_list += f"\n- ... and {len(touchpoints) - 6} more"
+                        console.print(Panel(header, title="[bold green]Journey Created[/bold green]", border_style="green"))
 
-                        journey_summary = (
-                            f"**Journey Created:** `{journey_id}`\n\n"
-                            f"**Target:** {confirmed_params['location']['label']}\n"
-                            f"**Campaign:** {confirmed_params['campaign_label']}\n\n"
-                            f"**Touchpoints:**\n{touchpoint_list}\n\n"
-                            f"You can now ask 'what if' questions like:\n"
-                            f"- \"What if we add a mailer on day 3?\"\n"
-                            f"- \"What if we remove the phone call?\""
-                        )
+                        # Journey flow visualization
+                        console.print("\n[bold]Journey Flow[/bold]")
+                        tree = _build_journey_tree(journey_result, show_because=True)
+                        console.print(tree)
 
+                        # Hint for next steps
                         console.print(
-                            Panel(
-                                journey_summary,
-                                title="[bold green]Journey Ready[/bold green]",
-                                border_style="green",
-                                padding=(0, 1),
-                            )
+                            "\n[dim]You can now ask 'what if' questions like:[/dim]\n"
+                            "[dim]  • \"What if we add a mailer on day 3?\"[/dim]\n"
+                            "[dim]  • \"What if we remove the phone call?\"[/dim]"
                         )
                     except Exception as e:
                         console.print(f"[red]Error creating journey: {e}[/red]")
