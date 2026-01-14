@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.text import Text
 
 from terryann_cli import __version__
+from terryann_cli.logging import logger
 
 # TerryAnn brand colors (from SVG logo)
 BLUE = "#b8d4e3"       # Soft blue - left circle
@@ -76,7 +77,8 @@ def render_iterm2_image(image_path: Path, width: int = 10) -> bool:
         sys.stdout.flush()
         return True
 
-    except Exception:
+    except Exception as e:
+        logger.debug(f"iTerm2 image rendering failed: {e}")
         return False
 
 

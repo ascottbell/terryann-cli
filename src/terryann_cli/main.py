@@ -7,6 +7,7 @@ from terryann_cli.commands.auth import login, logout, whoami
 from terryann_cli.commands.chat import chat
 from terryann_cli.commands.journeys import list_journeys, show_journey
 from terryann_cli.commands.status import status
+from terryann_cli.logging import enable_debug
 
 app = typer.Typer(
     name="terryann",
@@ -20,6 +21,11 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
+def debug_callback(value: bool):
+    if value:
+        enable_debug()
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -30,6 +36,13 @@ def main(
         callback=version_callback,
         is_eager=True,
         help="Show version and exit.",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        callback=debug_callback,
+        is_eager=True,
+        help="Enable debug logging to stderr.",
     ),
 ):
     """TerryAnn CLI - Medicare Journey Intelligence Platform.

@@ -11,29 +11,9 @@ from rich.table import Table
 from rich.tree import Tree
 
 from terryann_cli.config import load_config
+from terryann_cli.constants import CHANNEL_ICONS, NODE_TYPE_ICONS
 
 console = Console()
-
-# Channel icons for visual display
-CHANNEL_ICONS = {
-    "MAIL": "[blue]📬[/blue]",
-    "PHONE": "[green]📞[/green]",
-    "PHONE_OUTBOUND": "[green]📞[/green]",
-    "PHONE_INBOUND": "[cyan]📲[/cyan]",
-    "EMAIL": "[yellow]📧[/yellow]",
-    "SMS": "[magenta]💬[/magenta]",
-    "AGENT_VISIT": "[red]🏠[/red]",
-    "PORTAL": "[white]🌐[/white]",
-}
-
-NODE_TYPE_ICONS = {
-    "entry": "[green]▶[/green]",
-    "touchpoint": "[cyan]●[/cyan]",
-    "wait": "[yellow]⏳[/yellow]",
-    "decision": "[magenta]◆[/magenta]",
-    "status": "[blue]◉[/blue]",
-    "exit": "[red]■[/red]",
-}
 
 
 def _parse_datetime(dt_str: str) -> datetime:

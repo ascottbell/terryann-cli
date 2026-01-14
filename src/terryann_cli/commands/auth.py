@@ -13,7 +13,6 @@ console = Console()
 
 def login(
     email: str = typer.Option(None, "--email", "-e", help="Email address"),
-    password: str = typer.Option(None, "--password", "-p", help="Password (will prompt if not provided)"),
 ):
     """Log in to your TerryAnn account.
 
@@ -33,9 +32,8 @@ def login(
     if not email:
         email = typer.prompt("Email")
 
-    # Prompt for password securely if not provided
-    if not password:
-        password = getpass.getpass("Password: ")
+    # Always prompt for password securely (never accept via CLI args)
+    password = getpass.getpass("Password: ")
 
     try:
         console.print("[dim]Authenticating...[/dim]")

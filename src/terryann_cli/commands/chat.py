@@ -3,15 +3,20 @@
 import asyncio
 import getpass
 import random
+import time
 import uuid
 import webbrowser
+from pathlib import Path
 
 import httpx
 import typer
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.styles import Style
 from rich.console import Console
+
+from terryann_cli.logging import logger
 from rich.panel import Panel
 from rich.rule import Rule
 
@@ -87,8 +92,41 @@ def _show_menu():
     )
 
 
+def _get_cache_path(page: str) -> Path:
+    """Get cache file path for help content."""
+    cache_dir = Path.home() / ".terryann" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"{page}.txt"
+
+
+def _read_cached_help(page: str) -> str | None:
+    """Read cached help content if fresh (< 24 hours)."""
+    cache_path = _get_cache_path(page)
+    if cache_path.exists():
+        # Check if cache is less than 24 hours old
+        age_hours = (time.time() - cache_path.stat().st_mtime) / 3600
+        if age_hours < 24:
+            logger.debug(f"Using cached help content for {page} (age: {age_hours:.1f}h)")
+            return cache_path.read_text()
+        else:
+            logger.debug(f"Cache expired for {page} (age: {age_hours:.1f}h)")
+    return None
+
+
+def _write_cached_help(page: str, content: str):
+    """Write help content to cache."""
+    cache_path = _get_cache_path(page)
+    cache_path.write_text(content)
+    logger.debug(f"Cached help content for {page}")
+
+
 async def _fetch_help_content(page: str = "help") -> str | None:
-    """Fetch help content from terryann.ai with CLI surface filter."""
+    """Fetch help content from terryann.ai with CLI surface filter and caching."""
+    # Try cache first
+    cached = _read_cached_help(page)
+    if cached:
+        return cached
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"https://terryann.ai/{page}?surface=cli")
@@ -144,9 +182,18 @@ async def _fetch_help_content(page: str = "help") -> str | None:
             import html as html_module
             content = html_module.unescape(content)
 
+            # Cache for next time
+            _write_cached_help(page, content)
+
             return content
 
     except Exception as e:
+        logger.debug(f"Failed to fetch help content from {page}: {e}")
+        # Try stale cache as last resort
+        cache_path = _get_cache_path(page)
+        if cache_path.exists():
+            logger.debug(f"Using stale cache for {page}")
+            return cache_path.read_text()
         return None
 
 
@@ -228,10 +275,21 @@ async def get_user_input_async(session: PromptSession) -> str | None:
 async def chat_loop(client: GatewayClient, session_id: str, user: auth.AuthUser):
     """Run the interactive chat loop."""
     # Create prompt session for async input with slash command completion
+    # Custom style for completion menu - no background except highlighted item
+    menu_style = Style.from_dict({
+        'completion-menu': 'noinherit #5c4a3d',
+        'completion-menu.completion': 'noinherit #5c4a3d',
+        'completion-menu.completion.current': 'bg:#d4a574 #3d2e24 bold',  # Only this has background
+        'completion-menu.meta': 'noinherit #8b7355',
+        'completion-menu.meta.current': 'bg:#d4a574 #3d2e24',
+        'scrollbar.background': 'noinherit',
+        'scrollbar.button': 'bg:#c4a882',
+    })
     prompt_session = PromptSession(
         completer=SlashCommandCompleter(),
         complete_while_typing=True,
         reserve_space_for_menu=6,  # Show 6 items, scroll for rest
+        style=menu_style,
     )
     current_session_id = session_id
 
